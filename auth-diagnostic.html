@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MASAR sign-in test</title>
+<style>
+body{font:16px/1.5 -apple-system,system-ui,sans-serif;margin:16px;max-width:520px}
+label{display:block;margin-top:12px;font-weight:600}
+input{width:100%;font-size:16px;padding:10px;box-sizing:border-box}
+button{margin-top:16px;font-size:17px;padding:12px 16px;width:100%}
+pre{background:#f2f2f2;padding:10px;white-space:pre-wrap;word-break:break-word}
+</style>
+</head>
+<body>
+<h1>MASAR sign-in test</h1>
+<p>Project: <code id="proj"></code></p>
+<label for="k">Publishable key (starts with sb_publishable_)</label>
+<input id="k" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+<label for="e">Email</label>
+<input id="e" type="email" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false">
+<label for="p">Password</label>
+<input id="p" type="password" autocomplete="current-password">
+<button id="go">Test sign-in</button>
+<pre id="out">Nothing sent yet.</pre>
+<script>
+const BASE = 'https://afijvayzmxvslcyvhfjd.supabase.co';
+const $ = id => document.getElementById(id);
+$('proj').textContent = BASE;
+$('go').onclick = async () => {
+  const key = $('k').value.trim();
+  const email = $('e').value;
+  const password = $('p').value;
+  const lines = [];
+  lines.push('email length: ' + email.length);
+  lines.push('password length: ' + password.length);
+  lines.push('password has leading/trailing space: ' + (password !== password.trim()));
+  lines.push('password has non-ASCII characters: ' + /[^\x00-\x7F]/.test(password));
+  lines.push('key starts with sb_publishable_: ' + key.startsWith('sb_publishable_'));
+  $('out').textContent = lines.join('\n') + '\n\nSending...';
+  try {
+    const r = await fetch(BASE + '/auth/v1/token?grant_type=password', {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { apikey: key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    let j = {};
+    try { j = await r.json(); } catch (_) {}
+    lines.push('HTTP status: ' + r.status);
+    if (r.ok && j.access_token) {
+      lines.push('RESULT: SUCCESS, session issued');
+      lines.push('user id starts with: ' + String((j.user && j.user.id) || '').slice(0, 8));
+      lines.push('expires_in: ' + j.expires_in);
+      const lo = await fetch(BASE + '/auth/v1/logout?scope=local', {
+        method: 'POST',
+        headers: { apikey: key, Authorization: 'Bearer ' + j.access_token },
+      });
+      lines.push('session revoked (logout status): ' + lo.status);
+    } else {
+      lines.push('RESULT: REJECTED');
+      lines.push('error_code: ' + (j.error_code || j.code || '(none)'));
+      lines.push('message: ' + (j.msg || j.message || j.error_description || '(none)'));
+    }
+  } catch (err) {
+    lines.push('Network or browser error: ' + err.name);
+  }
+  $('out').textContent = lines.join('\n');
+  $('p').value = '';
+};
+</script>
+</body>
+</html>
